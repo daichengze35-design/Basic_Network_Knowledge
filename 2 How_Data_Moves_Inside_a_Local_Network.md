@@ -88,5 +88,75 @@
 - A switch usually keeps MAC forwarding entries scoped by VLAN.
 - Traffic between VLANs must be routed by a router or a Layer 3 switch.
 - Whether the traffic is allowed depends on routing and access-control policies.
-  
-### IP routing
+
+### IP routing and iproute2
+
+- IP routing answers one question:
+  - If this host wants to send an IP packet to a destination IP address, where should the packet go next?
+- In Linux, the modern toolset for checking IP addresses, routes, neighbors, and routing policy is usually called iproute2.
+  - `ip addr`: show or change IP addresses on interfaces.
+  - `ip route`: show or change routes.
+  - `ip rule`: show or change routing policy rules.
+  - `ip neigh`: show or change the ARP / neighbor table.
+
+#### Subnet mask
+
+- For `192.168.1.10/24`:
+  - `192.168.1.10` is the IP address.
+  - `/24` means the first 24 bits are the network part.
+  - The remaining 8 bits are the host part.
+  - `/24` is the same as subnet mask `255.255.255.0`.
+- To check whether two IPv4 addresses are in the same subnet, compare their network part.
+- For example:
+  - Host A: `192.168.1.10/24`
+  - Host B: `192.168.1.20/24`
+  - Both belong to `192.168.1.0/24`, so they are in the same subnet.
+  - Host C: `192.168.2.20/24`
+  - Host C belongs to `192.168.2.0/24`, so it is not in the same subnet as Host A.
+
+#### Local delivery and gateway delivery
+
+- If the destination IP address is in the same subnet:
+  - The host sends the packet directly to the destination host.
+  - It uses ARP to find the destination host's MAC address.
+- If the destination IP address is outside the local subnet:
+  - The host sends the packet to a router, usually called the default gateway.
+  - It uses ARP to find the gateway's MAC address, not the final destination's MAC address.
+
+#### Routing table
+
+- A routing table is a list of rules for deciding the next hop.
+- A simple routing table may look like this:
+  - `192.168.1.0/24 dev eth0 src 192.168.1.10`
+    - Traffic to `192.168.1.0/24` is directly reachable through `eth0`.
+  - `default via 192.168.1.1 dev eth0`
+    - Traffic that does not match a more specific route is sent to `192.168.1.1`.
+- Route selection usually follows longest prefix match:
+  - `192.168.1.128/25` is more specific than `192.168.1.0/24`.
+  - More specific routes win over less specific routes.
+
+#### Routing policy rules
+
+- `ip route` decides routes inside a routing table.
+- `ip rule` decides which routing table should be checked.
+- In simple hosts, the main routing table is usually enough.
+- In more complex hosts, policy routing can choose routes based on:
+  - Source IP address
+  - Incoming interface
+  - Firewall mark
+  - Rule priority
+- For example:
+  - `ip rule add from 10.0.0.0/24 table 100`
+  - `ip route add default via 10.0.0.1 dev eth1 table 100`
+  - This means traffic whose source IP is inside `10.0.0.0/24` should use routing table `100`.
+
+#### How a Linux host sends a packet
+
+1. It checks the destination IP address.
+2. It checks routing policy rules with `ip rule`.
+3. It checks the selected routing table with `ip route`.
+4. It chooses the route with the longest matching prefix.
+5. It decides whether to send directly to the destination host or to a gateway.
+6. It checks the neighbor table with `ip neigh`.
+7. If the needed MAC address is unknown, it uses ARP.
+8. It sends the Ethernet frame to the next-hop MAC address.
